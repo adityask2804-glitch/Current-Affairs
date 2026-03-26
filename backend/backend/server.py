@@ -16,7 +16,7 @@ import feedparser
 from newspaper import Article
 from bs4 import BeautifulSoup
 import requests
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from openai import AsyncOpenAI
 
 # PDF Generation
 from reportlab.lib.pagesizes import letter
@@ -112,15 +112,10 @@ class PushTokenModel(BaseModel):
     registered_at: datetime = Field(default_factory=datetime.utcnow)
 
 # ==================== Helper Functions ====================
-
 async def categorize_article_with_llm(title: str, content: str) -> str:
     """Use LLM to categorize article into UPSC topics"""
     try:
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"categorize_{datetime.utcnow().timestamp()}",
-            system_message="You are an expert in UPSC Civil Services Examination preparation and current affairs categorization."
-        ).with_model("openai", "gpt-5.2")
+        client = AsyncOpenAI(api_key=EMERGENT_LLM_KEY)
         
         categories_str = ", ".join(TOPIC_CATEGORIES)
         prompt = f"""Analyze this article and categorize it into ONE of these UPSC-relevant topics:
@@ -131,10 +126,17 @@ Article Content (first 500 chars): {content[:500]}
 
 Respond with ONLY the category name, nothing else."""
         
-        message = UserMessage(text=prompt)
-        response = await chat.send_message(message)
+        response = await client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are an expert in UPSC Civil Services Examination preparation and current affairs categorization."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=50,
+            temperature=0.3
+        )
         
-        category = response.strip()
+        category = response.choices[0].message.content.strip()
         if category not in TOPIC_CATEGORIES:
             category = "Miscellaneous"
         
@@ -143,14 +145,11 @@ Respond with ONLY the category name, nothing else."""
         logger.error(f"Error in categorization: {e}")
         return "Miscellaneous"
 
+
 async def summarize_article_with_llm(title: str, content: str) -> str:
     """Use LLM to create UPSC-focused summary"""
     try:
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"summarize_{datetime.utcnow().timestamp()}",
-            system_message="You are an expert in creating concise, UPSC-focused summaries of current affairs articles."
-        ).with_model("openai", "gpt-5.2")
+        client = AsyncOpenAI(api_key=EMERGENT_LLM_KEY)
         
         prompt = f"""Create a concise summary of this article for UPSC Civil Services preparation. 
 Focus on:
@@ -168,10 +167,17 @@ Article Content: {content}
 
 Summary:"""
         
-        message = UserMessage(text=prompt)
-        response = await chat.send_message(message)
+        response = await client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are an expert in creating concise, UPSC-focused summaries of current affairs articles."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=400,
+            temperature=0.7
+        )
         
-        return response.strip()
+        return response.choices[0].message.content.strip()
     except Exception as e:
         logger.error(f"Error in summarization: {e}")
         return f"Summary generation failed. Original article: {content[:300]}..."
