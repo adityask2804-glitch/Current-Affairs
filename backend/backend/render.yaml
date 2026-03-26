@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: upsc-backend
+    runtime: python
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: "pip install -r backend/requirements.txt"
+    startCommand: "cd backend && python run.py"
+    envVars:
+      - key: MONGO_URL
+        sync: false
+      - key: DB_NAME
+        value: upsc_affairs
+      - key: EMERGENT_LLM_KEY
+        value: sk-emergent-5A9Cf433f9528Cd289
+    autoDeploy: true
