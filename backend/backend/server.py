@@ -13,7 +13,6 @@ import asyncio
 
 # Scraping and AI imports
 import feedparser
-from newspaper import Article
 from bs4 import BeautifulSoup
 import requests
 from openai import AsyncOpenAI
@@ -183,13 +182,39 @@ Summary:"""
         return f"Summary generation failed. Original article: {content[:300]}..."
 
 async def fetch_article_content(url: str) -> tuple:
-    """Fetch full article content using newspaper3k"""
+    """Fetch full article content using requests + BeautifulSoup"""
     try:
-        article = Article(url)
-        article.download()
-        article.parse()
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
         
-        return article.title, article.text, article.publish_date
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Try to extract title
+        title = None
+        if soup.find('h1'):
+            title = soup.find('h1').get_text().strip()
+        elif soup.find('title'):
+            title = soup.find('title').get_text().strip()
+        
+        # Try to extract article text
+        content = ""
+        
+        # Look for common article containers
+        article_body = soup.find('article') or soup.find('div', class_='article-body') or soup.find('div', id='content')
+        
+        if article_body:
+            paragraphs = article_body.find_all('p')
+            content = ' '.join([p.get_text().strip() for p in paragraphs if p.get_text().strip()])
+        else:
+            # Fallback: get all paragraphs
+            paragraphs = soup.find_all('p')
+            content = ' '.join([p.get_text().strip() for p in paragraphs[:20] if p.get_text().strip()])
+        
+        return title, content, None
+        
     except Exception as e:
         logger.error(f"Error fetching article from {url}: {e}")
         return None, None, None
